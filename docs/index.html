@@ -76,6 +76,20 @@ svg.seq{display:block;min-width:580px;width:100%;height:auto}
 .rls-toggle-btn{display:block;margin:10px auto 0;padding:5px 14px;border-radius:6px;background:transparent;border:1px solid #2e3347;color:#7eb8f7;font-size:11px;cursor:pointer;transition:all .15s}
 .rls-toggle-btn:hover{background:#1c1f2e}
 
+/* ── Add tenant ── */
+.add-tenant-intro{display:flex;align-items:flex-start;gap:16px;background:#0f1117;border:1px solid #1e2333;border-radius:12px;padding:20px 24px;margin-top:40px;margin-bottom:28px}
+.discovery-badge{flex-shrink:0;background:#0d1a2d;border:1px solid #1e3a5e;border-radius:8px;padding:8px 12px;font-family:'SF Mono',ui-monospace,monospace;font-size:11px;color:#7eb8f7;white-space:nowrap}
+.discovery-badge span{display:block;color:#4a5568;font-size:10px;margin-bottom:3px}
+.add-tenant-intro p{font-size:13px;color:#8b95a5;line-height:1.65}
+.add-tenant-intro p strong{color:#c5ccd9}
+.steps-list{display:flex;flex-direction:column;gap:12px}
+.step-item{display:grid;grid-template-columns:28px 1fr;gap:14px;align-items:start}
+.step-num{width:28px;height:28px;border-radius:50%;background:#1c1f2e;border:1px solid #2e3347;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#3ecf8e;flex-shrink:0;margin-top:2px}
+.step-body h4{font-size:13px;font-weight:600;color:#c5ccd9;margin-bottom:6px}
+.step-body p{font-size:12px;color:#8b95a5;line-height:1.6;margin-bottom:8px}
+.code-block{background:#0a0d14;border:1px solid #1e2333;border-radius:7px;padding:10px 14px;font-family:'SF Mono',ui-monospace,monospace;font-size:11px;line-height:1.8;overflow-x:auto;white-space:pre}
+.cb-comment{color:#4a5568}.cb-kw{color:#7c8df8}.cb-str{color:#f59e0b}.cb-fn{color:#3ecf8e}.cb-val{color:#7eb8f7}
+
 /* ── Architecture ── */
 .arch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
 @media(max-width:640px){.arch-grid{grid-template-columns:1fr}}
@@ -374,6 +388,66 @@ footer a:hover{text-decoration:underline}
       <div class="stack-item">
         <h4>Demo App</h4>
         <p>Single HTML file — no build step. Implements full PKCE flow, one-click demo accounts, and per-tenant notes dashboard.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── Adding a tenant ────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">Extensibility</div>
+    <h2>Adding a new tenant takes three steps</h2>
+    <p class="section-sub">Because the Command Center exposes a standard OIDC discovery document, new tenants self-configure — no key exchange, no shared secrets.</p>
+
+    <div class="add-tenant-intro">
+      <div class="discovery-badge">
+        <span>OIDC Discovery</span>
+        /.well-known/openid-configuration
+      </div>
+      <p>The discovery endpoint tells any OAuth 2.1 client where to find the JWKS, token endpoint, and supported algorithms. Tenant functions call <strong>createRemoteJWKSet</strong> pointing at the discovery URL — the key location is resolved automatically. Adding a tenant means wiring up that URL and registering a <code style="color:#3ecf8e;font-family:monospace">client_id</code> — nothing else changes on the Command Center side.</p>
+    </div>
+
+    <div class="steps-list">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h4>Create a new Supabase project and deploy the data function</h4>
+          <p>Copy either tenant function, update the two constants at the top, and deploy.</p>
+          <div class="code-block"><span class="cb-comment">// tenant-gamma/supabase/functions/data/index.ts</span>
+<span class="cb-kw">const</span> <span class="cb-val">CC_ISSUER</span> = <span class="cb-str">"https://&lt;CC_PROJECT_REF&gt;.supabase.co/functions/v1/oidc"</span>;
+<span class="cb-kw">const</span> <span class="cb-val">JWKS</span>     = createRemoteJWKSet(<span class="cb-kw">new</span> <span class="cb-fn">URL</span>(<span class="cb-str">`${CC_ISSUER}/jwks`</span>));
+<span class="cb-kw">const</span> <span class="cb-val">TENANT_ID</span> = <span class="cb-str">"tenant-gamma"</span>;</div>
+          <div class="code-block" style="margin-top:8px">supabase functions deploy data --project-ref &lt;GAMMA_REF&gt;</div>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h4>Register the client in Command Center</h4>
+          <p>One row in <code style="color:#3ecf8e;font-family:monospace">oauth_clients</code>. The CC function picks it up immediately — no redeploy needed.</p>
+          <div class="code-block"><span class="cb-kw">INSERT INTO</span> oauth_clients (client_id, name, redirect_uris)
+<span class="cb-kw">VALUES</span> (
+  <span class="cb-str">'tenant-gamma'</span>,
+  <span class="cb-str">'Tenant Gamma'</span>,
+  <span class="cb-fn">ARRAY</span>[<span class="cb-str">'https://your-app.com'</span>]
+);</div>
+        </div>
+      </div>
+
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h4>Grant users access</h4>
+          <p>Add <code style="color:#3ecf8e;font-family:monospace">tenant-gamma</code> to a user's <code style="color:#3ecf8e;font-family:monospace">app_metadata.allowed_tenants</code> in the CC project. Users without this array set have access to all tenants.</p>
+          <div class="code-block"><span class="cb-comment">-- via SQL, or Supabase Dashboard → Authentication → Users</span>
+<span class="cb-kw">UPDATE</span> auth.users
+<span class="cb-kw">SET</span> raw_app_meta_data = raw_app_meta_data || <span class="cb-str">'{"allowed_tenants":["tenant-gamma"]}'</span>::jsonb
+<span class="cb-kw">WHERE</span> email = <span class="cb-str">'user@example.com'</span>;</div>
+        </div>
       </div>
     </div>
   </div>

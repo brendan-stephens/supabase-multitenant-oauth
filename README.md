@@ -197,6 +197,54 @@ A user without `allowed_tenants` in their metadata can access any tenant. Set it
 
 ---
 
+## Adding a new tenant
+
+Because the Command Center exposes a standard OIDC discovery document at `/.well-known/openid-configuration`, new tenants self-configure — there's no key exchange or shared secret between the tenant and the CC.
+
+### 1 — Deploy the tenant function
+
+Copy either existing tenant function, update the two constants at the top, and deploy to a new Supabase project:
+
+```ts
+// tenant-gamma/supabase/functions/data/index.ts
+const CC_ISSUER = "https://<CC_PROJECT_REF>.supabase.co/functions/v1/oidc";
+const JWKS      = createRemoteJWKSet(new URL(`${CC_ISSUER}/jwks`));
+const TENANT_ID = "tenant-gamma";
+```
+
+```bash
+supabase functions deploy data --project-ref <GAMMA_PROJECT_REF>
+```
+
+Don't forget to create the `tenant_notes` table and RLS policy in the new project (see [step 3](#3--create-tables-in-each-tenant-project) in Setup).
+
+### 2 — Register the client in Command Center
+
+One row in `oauth_clients` — the OIDC function reads it live, no redeploy needed:
+
+```sql
+INSERT INTO oauth_clients (client_id, name, redirect_uris)
+VALUES (
+  'tenant-gamma',
+  'Tenant Gamma',
+  ARRAY['https://your-app.com']
+);
+```
+
+### 3 — Grant users access
+
+Add `tenant-gamma` to the user's `app_metadata.allowed_tenants` array in the CC project:
+
+```sql
+UPDATE auth.users
+SET raw_app_meta_data = raw_app_meta_data || '{"allowed_tenants":["tenant-gamma"]}'::jsonb
+WHERE email = 'user@example.com';
+```
+
+Users without an `allowed_tenants` array in their metadata can access any tenant. Set it to restrict.
+
+---
+
 ## Running the demo app locally
 
 The demo app is a single HTML file — no build step.
