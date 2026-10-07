@@ -54,8 +54,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "POST" && path === "/authorize") return await authorizePost(req, url);
     if (req.method === "POST" && path === "/token") return await token(req);
     if (path === "/userinfo") return await userinfo(req);
-    if (req.method === "GET" && path === "/signup") return await signupGet(url);
-    if (req.method === "POST" && path === "/signup") return await signupPost(req, url);
+    if (path === "/signup") return Response.json({ error: "signups_disabled" }, { status: 403, headers: cors });
     return new Response("Not Found", { status: 404, headers: cors });
   } catch (e) {
     console.error("[oidc]", e);
