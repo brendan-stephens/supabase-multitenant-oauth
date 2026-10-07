@@ -42,6 +42,23 @@ App ◄──────────────── { notes } (scoped to JWT
 
 ---
 
+## Why not use Supabase's built-in OAuth Server?
+
+Supabase has an **OAuth Server** setting (under Authentication → Configuration) that lets a Supabase project act as an OAuth provider — essentially "Sign in with Supabase." That feature is designed for a different use case: letting *external* applications delegate authentication to your Supabase project, similar to "Sign in with Google."
+
+This project solves a different problem: **one identity provider controlling access to multiple separate Supabase projects**, where each project is a fully isolated tenant with its own database. The built-in OAuth Server can't federate identity across multiple Supabase projects out of the box — it issues tokens for its own project's auth system, not for other projects to consume.
+
+By building the OIDC provider as an Edge Function we get:
+
+- **Cross-project JWT trust** — tenant functions verify the CC's RS256 signature via JWKS; they don't need to share a database or a Supabase org
+- **Per-tenant access control** — `app_metadata.allowed_tenants` on the CC user record gates which tenants a user can reach, all enforced server-side before an auth code is issued
+- **Full OIDC spec compliance** — discovery document, JWKS endpoint, authorization code flow, PKCE, userinfo endpoint — any standard OAuth 2.1 client can integrate with it
+- **No dependency on Supabase's auth roadmap** — the provider logic lives in code you own and deploy
+
+The tradeoff is complexity: you own the token issuance, key rotation, and auth code TTL logic. The built-in OAuth Server is the right default if you just need to let a single external app authenticate against one Supabase project.
+
+---
+
 ## Project structure
 
 ```
