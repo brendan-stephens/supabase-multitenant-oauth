@@ -139,7 +139,9 @@ footer a:hover{text-decoration:underline}
 
     <div class="seq-wrap" id="seq-wrap">
       <div class="seq-controls">
-        <button class="btn-seq" id="btn-seq" onclick="handleSeqBtn()">▶ Play</button>
+        <button class="btn-seq" id="btn-prev" onclick="prevStep()" disabled>◀ Prev</button>
+        <button class="btn-seq" id="btn-play" onclick="handlePlayBtn()">▶ Play</button>
+        <button class="btn-seq" id="btn-next" onclick="nextStep()">Next ▶</button>
         <span class="step-ind" id="step-ind">step 0 / 10</span>
       </div>
 
@@ -395,59 +397,88 @@ let step = 0;
 let timer = null;
 let playing = false;
 
-function setBtn(txt, disabled) {
-  const b = document.getElementById('btn-seq');
-  b.textContent = txt;
-  b.disabled = !!disabled;
-}
+function el(id) { return document.getElementById(id); }
 
-function setInd() {
-  document.getElementById('step-ind').textContent = `step ${step} / ${TOTAL}`;
-}
-
-function showStep(n) {
-  const el = document.getElementById(`s${n}`);
-  if (el) el.style.opacity = '1';
-}
-
-function dimStep(n) {
-  const el = document.getElementById(`s${n}`);
-  if (el) el.style.opacity = '0.28';
-}
-
-function resetSeq(silent) {
-  clearTimeout(timer); timer = null; playing = false;
-  step = 0;
-  for (let i = 1; i <= TOTAL; i++) {
-    const el = document.getElementById(`s${i}`);
-    if (el) { el.style.transition = 'none'; el.style.opacity = '0'; setTimeout(() => el.style.transition = 'opacity .4s ease', 20); }
+function syncControls() {
+  el('step-ind').textContent = `step ${step} / ${TOTAL}`;
+  el('btn-prev').disabled = step === 0 || playing;
+  el('btn-next').disabled = step >= TOTAL || playing;
+  if (playing) {
+    el('btn-play').textContent = '⏸ Pause';
+    el('btn-play').disabled = false;
+  } else if (step >= TOTAL) {
+    el('btn-play').textContent = '↺ Replay';
+    el('btn-play').disabled = false;
+  } else {
+    el('btn-play').textContent = step === 0 ? '▶ Play' : '▶ Resume';
+    el('btn-play').disabled = false;
   }
-  if (!silent) { setInd(); setBtn('▶ Play', false); }
+}
+
+function showStep(n, active) {
+  const e = document.getElementById(`s${n}`);
+  if (e) e.style.opacity = active ? '1' : '0.28';
+}
+
+function hideStep(n) {
+  const e = document.getElementById(`s${n}`);
+  if (e) { e.style.transition = 'none'; e.style.opacity = '0'; setTimeout(() => e.style.transition = 'opacity .4s ease', 20); }
+}
+
+function renderSteps() {
+  for (let i = 1; i <= TOTAL; i++) {
+    if (i < step) showStep(i, false);
+    else if (i === step) showStep(i, true);
+    else hideStep(i);
+  }
+}
+
+function stopTimer() { clearTimeout(timer); timer = null; }
+
+function resetSeq() {
+  stopTimer(); playing = false; step = 0;
+  for (let i = 1; i <= TOTAL; i++) hideStep(i);
+  syncControls();
 }
 
 function tick() {
   step++;
-  for (let i = 1; i < step; i++) dimStep(i);
-  showStep(step);
-  setInd();
-  if (step >= TOTAL) {
-    playing = false; timer = null;
-    setBtn('↺ Replay', false);
-  } else {
-    timer = setTimeout(tick, 850);
-  }
+  renderSteps();
+  syncControls();
+  if (step >= TOTAL) { playing = false; timer = null; }
+  else { timer = setTimeout(tick, 850); }
 }
 
 function play() {
-  if (playing) return;
+  if (playing || step >= TOTAL) return;
   playing = true;
-  setBtn('⏸ Playing…', true);
-  timer = setTimeout(tick, 300);
+  syncControls();
+  timer = setTimeout(tick, step === 0 ? 300 : 500);
 }
 
-function handleSeqBtn() {
-  if (step >= TOTAL) { resetSeq(); setTimeout(play, 60); }
-  else if (!playing) play();
+function pause() {
+  stopTimer(); playing = false; syncControls();
+}
+
+function handlePlayBtn() {
+  if (playing) { pause(); }
+  else if (step >= TOTAL) { resetSeq(); setTimeout(play, 60); }
+  else { play(); }
+}
+
+function nextStep() {
+  if (playing || step >= TOTAL) return;
+  step++;
+  renderSteps();
+  syncControls();
+}
+
+function prevStep() {
+  if (playing || step === 0) return;
+  hideStep(step);
+  step--;
+  renderSteps();
+  syncControls();
 }
 
 // Auto-play on scroll into view
