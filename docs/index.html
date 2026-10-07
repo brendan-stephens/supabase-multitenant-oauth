@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Tenant OAuth 2.1 + PKCE — Supabase Demo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0d14;color:#e2e8f0;line-height:1.6}
+
+/* ── Layout ── */
+.container{max-width:960px;margin:0 auto;padding:0 28px}
+section{padding:88px 0}
+.divider{height:1px;background:linear-gradient(90deg,transparent,#1e2333 30%,#1e2333 70%,transparent)}
+
+/* ── Typography ── */
+h1{font-size:clamp(30px,5.5vw,52px);font-weight:800;line-height:1.12;letter-spacing:-.025em}
+h2{font-size:clamp(20px,3.2vw,30px);font-weight:700;letter-spacing:-.015em;margin-bottom:10px}
+.section-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#3ecf8e;margin-bottom:10px}
+.section-sub{color:#8b95a5;font-size:15px;max-width:560px;line-height:1.65}
+
+/* ── Hero ── */
+.hero{padding:110px 0 88px;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:7px;background:#0d2818;border:1px solid #1a5e45;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;color:#3ecf8e;margin-bottom:28px}
+.hero-badge-dot{width:6px;height:6px;border-radius:50%;background:#3ecf8e;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+h1 em{font-style:normal;color:#3ecf8e}
+.hero-sub{font-size:17px;color:#8b95a5;max-width:500px;margin:16px auto 40px;line-height:1.7}
+.hero-ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:11px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:all .15s;border:none;cursor:pointer}
+.btn-primary{background:#3ecf8e;color:#000}
+.btn-primary:hover{background:#36ba7e}
+.btn-outline{background:transparent;color:#c5ccd9;border:1px solid #2e3347}
+.btn-outline:hover{background:#1c1f2e;border-color:#3a4460}
+.actors{display:flex;gap:10px;justify-content:center;margin-top:52px;flex-wrap:wrap}
+.actor-chip{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;border:1px solid}
+.actor-chip-dot{width:7px;height:7px;border-radius:50%}
+.chip-app{background:#0d1a2d;border-color:#1e3a5e;color:#7eb8f7}
+.chip-app .actor-chip-dot{background:#7eb8f7}
+.chip-cc{background:#0d2818;border-color:#1a5e45;color:#3ecf8e}
+.chip-cc .actor-chip-dot{background:#3ecf8e}
+.chip-tenant{background:#1a1a3e;border-color:#2e2e7a;color:#7c8df8}
+.chip-tenant .actor-chip-dot{background:#7c8df8}
+
+/* ── Sequence diagram ── */
+.seq-wrap{background:#0f1117;border:1px solid #1e2333;border-radius:16px;padding:28px;overflow-x:auto;margin-top:40px}
+.seq-controls{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.btn-seq{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:7px;background:#1c1f2e;border:1px solid #2e3347;color:#c5ccd9;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-seq:not(:disabled):hover{background:#252a3d;border-color:#3ecf8e;color:#3ecf8e}
+.btn-seq:disabled{opacity:.5;cursor:default}
+.step-ind{font-size:12px;color:#4a5568;font-family:'SF Mono',ui-monospace,monospace}
+svg.seq{display:block;min-width:580px;width:100%;height:auto}
+.seq-step{transition:opacity .4s ease}
+
+/* ── RLS ── */
+.rls-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px;align-items:start}
+@media(max-width:680px){.rls-grid{grid-template-columns:1fr}}
+.rls-card{background:#0f1117;border:1px solid #1e2333;border-radius:12px;overflow:hidden}
+.rls-card-hdr{padding:12px 18px;border-bottom:1px solid #1e2333;font-size:12px;font-weight:600;color:#8b95a5;display:flex;align-items:center;gap:8px}
+.rls-card-body{padding:16px 18px}
+.db-table{width:100%;border-collapse:collapse;font-size:11.5px;font-family:'SF Mono',ui-monospace,monospace}
+.db-table th{color:#4a5568;font-weight:600;text-align:left;padding:4px 8px 8px;border-bottom:1px solid #1e2333}
+.db-table td{padding:7px 8px;transition:all .45s ease}
+.db-row{transition:opacity .45s ease,transform .45s ease,background .45s ease}
+.db-row.match td{color:#3ecf8e}
+.db-row.match{background:rgba(14,56,34,.5)}
+.db-row.no-match{opacity:0;transform:translateX(10px);pointer-events:none}
+.jwt-box{background:#0d1a2d;border:1px solid #1e3a5e;border-radius:8px;padding:13px 15px;font-family:'SF Mono',ui-monospace,monospace;font-size:11.5px;line-height:2}
+.jk{color:#4a5568}.jv{color:#7eb8f7}
+.jv.hl{color:#3ecf8e;font-weight:700;animation:glow 1.6s ease-in-out infinite alternate}
+@keyframes glow{from{text-shadow:0 0 4px #3ecf8e33}to{text-shadow:0 0 14px #3ecf8e88}}
+.policy-box{background:#140d20;border:1px solid #2d1b4e;border-radius:8px;padding:13px 15px;font-family:'SF Mono',ui-monospace,monospace;font-size:11.5px;line-height:2;margin-top:14px}
+.pc{color:#4a5568}.pk{color:#7c8df8}.pf{color:#3ecf8e}.ps{color:#f59e0b}
+.rls-status{margin-top:14px;font-size:11px;color:#4a5568;text-align:center;transition:color .4s}
+.rls-toggle-btn{display:block;margin:10px auto 0;padding:5px 14px;border-radius:6px;background:transparent;border:1px solid #2e3347;color:#7eb8f7;font-size:11px;cursor:pointer;transition:all .15s}
+.rls-toggle-btn:hover{background:#1c1f2e}
+
+/* ── Architecture ── */
+.arch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+@media(max-width:640px){.arch-grid{grid-template-columns:1fr}}
+.arch-card{background:#0f1117;border:1px solid #1e2333;border-radius:12px;padding:20px}
+.arch-card-top{display:flex;align-items:center;gap:11px;margin-bottom:16px}
+.arch-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0}
+.icon-cc{background:#0d2818;color:#3ecf8e;border:1px solid #1a5e45}
+.icon-alpha{background:#0d2818;color:#3ecf8e;border:1px solid #1a5e45}
+.icon-beta{background:#1a1a3e;color:#7c8df8;border:1px solid #2e2e7a}
+.arch-card h3{font-size:13px;font-weight:600}
+.arch-ref{font-size:10px;font-family:'SF Mono',ui-monospace,monospace;color:#4a5568;margin-top:2px}
+.arch-features{list-style:none;display:flex;flex-direction:column;gap:6px}
+.arch-features li{font-size:12px;color:#8b95a5;display:flex;align-items:flex-start;gap:7px}
+.arch-features li::before{content:'→';color:#2e3347;flex-shrink:0}
+
+/* ── Stack ── */
+.stack-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:36px}
+.stack-item{background:#0f1117;border:1px solid #1e2333;border-radius:10px;padding:14px 18px;flex:1;min-width:180px}
+.stack-item h4{font-size:12px;font-weight:600;color:#c5ccd9;margin-bottom:6px}
+.stack-item p{font-size:12px;color:#4a5568;line-height:1.6}
+
+/* ── Footer ── */
+footer{border-top:1px solid #1e2333;padding:36px 0;text-align:center}
+footer p{font-size:13px;color:#4a5568}
+footer a{color:#7eb8f7;text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<!-- ── Hero ─────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      Built on Supabase Edge Functions
+    </div>
+    <h1>Multi-Tenant <em>OAuth 2.1</em><br>+ PKCE Demo</h1>
+    <p class="hero-sub">A custom OIDC provider running entirely on Supabase Edge Functions. No third-party auth service. Three isolated Supabase projects.</p>
+    <div class="hero-ctas">
+      <a href="demo/" class="btn btn-primary">Try the Demo ↗</a>
+      <a href="https://github.com/brendan-stephens/supabase-multitenant-oauth" class="btn btn-outline">View Source on GitHub</a>
+    </div>
+    <div class="actors">
+      <div class="actor-chip chip-app"><span class="actor-chip-dot"></span>Demo App</div>
+      <div class="actor-chip chip-cc"><span class="actor-chip-dot"></span>Command Center (OIDC Provider)</div>
+      <div class="actor-chip chip-tenant"><span class="actor-chip-dot"></span>Tenant Alpha</div>
+      <div class="actor-chip chip-tenant"><span class="actor-chip-dot"></span>Tenant Beta</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── Sequence Diagram ───────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">Authorization Code Flow</div>
+    <h2>How the OAuth 2.1 + PKCE flow works</h2>
+    <p class="section-sub">The app never handles user credentials directly. It exchanges a short-lived code for a RS256-signed JWT — PKCE ensures the verifier never leaves the client.</p>
+
+    <div class="seq-wrap" id="seq-wrap">
+      <div class="seq-controls">
+        <button class="btn-seq" id="btn-seq" onclick="handleSeqBtn()">▶ Play</button>
+        <span class="step-ind" id="step-ind">step 0 / 10</span>
+      </div>
+
+      <!-- viewBox chosen so it scales cleanly. Three actors at x=100, x=380, x=660 -->
+      <svg class="seq" viewBox="0 0 760 570" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah-blue"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#7eb8f7"/></marker>
+          <marker id="ah-green" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#3ecf8e"/></marker>
+          <marker id="ah-purp"  markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#c084fc"/></marker>
+          <marker id="ah-ind"   markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><polygon points="0,0 7,3.5 0,7" fill="#7c8df8"/></marker>
+        </defs>
+
+        <!-- Actor boxes -->
+        <rect x="20"  y="18" width="160" height="38" rx="8" fill="#0d1a2d" stroke="#1e3a5e" stroke-width="1.5"/>
+        <text x="100" y="42" text-anchor="middle" fill="#7eb8f7" font-size="13" font-weight="600" font-family="-apple-system,sans-serif">App (Browser)</text>
+
+        <rect x="300" y="18" width="160" height="38" rx="8" fill="#0d2818" stroke="#1a5e45" stroke-width="1.5"/>
+        <text x="380" y="42" text-anchor="middle" fill="#3ecf8e" font-size="13" font-weight="600" font-family="-apple-system,sans-serif">Command Center</text>
+
+        <rect x="580" y="18" width="160" height="38" rx="8" fill="#1a1a3e" stroke="#2e2e7a" stroke-width="1.5"/>
+        <text x="660" y="42" text-anchor="middle" fill="#7c8df8" font-size="13" font-weight="600" font-family="-apple-system,sans-serif">Tenant API</text>
+
+        <!-- Lifelines -->
+        <line x1="100" y1="56" x2="100" y2="558" stroke="#1e2333" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line x1="380" y1="56" x2="380" y2="558" stroke="#1e2333" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line x1="660" y1="56" x2="660" y2="558" stroke="#1e2333" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+        <!-- Step 1 — App → CC: GET /authorize -->
+        <g class="seq-step" id="s1" opacity="0">
+          <line x1="108" y1="96"  x2="366" y2="96"  stroke="#7eb8f7" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="237" y="89"  text-anchor="middle" fill="#7eb8f7" font-size="11" font-family="'SF Mono',monospace">GET /authorize</text>
+          <text x="237" y="110" text-anchor="middle" fill="#4a5568" font-size="10" font-family="-apple-system,sans-serif">client_id, code_challenge, state</text>
+        </g>
+
+        <!-- Step 2 — CC → App: 302 ?_cc=login -->
+        <g class="seq-step" id="s2" opacity="0">
+          <line x1="372" y1="148" x2="114" y2="148" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="237" y="141" text-anchor="middle" fill="#3ecf8e" font-size="11" font-family="'SF Mono',monospace">302 → app?_cc=login</text>
+          <text x="237" y="162" text-anchor="middle" fill="#4a5568" font-size="10" font-family="-apple-system,sans-serif">redirect — app renders login form</text>
+        </g>
+
+        <!-- Step 3 — App → CC: POST /authorize (credentials) -->
+        <g class="seq-step" id="s3" opacity="0">
+          <line x1="108" y1="200" x2="366" y2="200" stroke="#7eb8f7" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="237" y="193" text-anchor="middle" fill="#7eb8f7" font-size="11" font-family="'SF Mono',monospace">POST /authorize</text>
+          <text x="237" y="214" text-anchor="middle" fill="#4a5568" font-size="10" font-family="-apple-system,sans-serif">email + password (HTML form submit)</text>
+        </g>
+
+        <!-- Step 4 — CC → App: 302 ?code= -->
+        <g class="seq-step" id="s4" opacity="0">
+          <line x1="372" y1="254" x2="114" y2="254" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="237" y="247" text-anchor="middle" fill="#3ecf8e" font-size="11" font-family="'SF Mono',monospace">302 → app?code=xyz&state=…</text>
+          <text x="237" y="268" text-anchor="middle" fill="#4a5568" font-size="10" font-family="-apple-system,sans-serif">one-time auth code (5 min TTL)</text>
+        </g>
+
+        <!-- Step 5 — App → CC: POST /token -->
+        <g class="seq-step" id="s5" opacity="0">
+          <line x1="108" y1="308" x2="366" y2="308" stroke="#7eb8f7" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="237" y="301" text-anchor="middle" fill="#7eb8f7" font-size="11" font-family="'SF Mono',monospace">POST /token</text>
+          <text x="237" y="322" text-anchor="middle" fill="#4a5568" font-size="10" font-family="-apple-system,sans-serif">code + code_verifier (PKCE proof)</text>
+        </g>
+
+        <!-- Step 6 — CC → App: JWT -->
+        <g class="seq-step" id="s6" opacity="0">
+          <line x1="372" y1="358" x2="114" y2="358" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="237" y="351" text-anchor="middle" fill="#3ecf8e" font-size="11" font-family="'SF Mono',monospace">{ access_token, id_token }</text>
+          <text x="237" y="372" text-anchor="middle" fill="#4a5568" font-size="10" font-family="-apple-system,sans-serif">RS256 signed JWT · 1 h expiry</text>
+        </g>
+
+        <!-- Step 7 — App → Tenant: GET /data Bearer JWT -->
+        <g class="seq-step" id="s7" opacity="0">
+          <line x1="108" y1="418" x2="644" y2="418" stroke="#c084fc" stroke-width="1.5" marker-end="url(#ah-purp)"/>
+          <text x="390" y="410" text-anchor="middle" fill="#c084fc" font-size="11" font-family="'SF Mono',monospace">GET /data  ·  Authorization: Bearer &lt;JWT&gt;</text>
+        </g>
+
+        <!-- Step 8 — Tenant → CC: GET /jwks -->
+        <g class="seq-step" id="s8" opacity="0">
+          <line x1="652" y1="452" x2="394" y2="452" stroke="#7c8df8" stroke-width="1.5" marker-end="url(#ah-ind)"/>
+          <text x="530" y="445" text-anchor="middle" fill="#7c8df8" font-size="11" font-family="'SF Mono',monospace">GET /jwks  (first call, then cached)</text>
+        </g>
+
+        <!-- Step 9 — CC → Tenant: public keys -->
+        <g class="seq-step" id="s9" opacity="0">
+          <line x1="388" y1="486" x2="644" y2="486" stroke="#3ecf8e" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="530" y="479" text-anchor="middle" fill="#3ecf8e" font-size="11" font-family="'SF Mono',monospace">{ keys }  RS256 public key</text>
+        </g>
+
+        <!-- Step 10 — Tenant → App: notes -->
+        <g class="seq-step" id="s10" opacity="0">
+          <line x1="652" y1="538" x2="114" y2="538" stroke="#c084fc" stroke-width="1.5" marker-end="url(#ah-purp)"/>
+          <text x="390" y="530" text-anchor="middle" fill="#c084fc" font-size="11" font-family="'SF Mono',monospace">{ user, tenant, notes }  ← rows scoped to JWT sub</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── RLS ───────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">Row Level Security</div>
+    <h2>Each user only sees their own data</h2>
+    <p class="section-sub">Tenant functions extract the <code style="font-family:monospace;color:#3ecf8e;font-size:13px">sub</code> claim from the verified JWT and use it as <code style="font-family:monospace;color:#3ecf8e;font-size:13px">user_id</code>. Postgres RLS enforces per-user row isolation.</p>
+
+    <div class="rls-grid" id="rls-grid">
+      <!-- Left: JWT + Policy -->
+      <div>
+        <div class="rls-card">
+          <div class="rls-card-hdr">🔐 Incoming JWT (verified by CC's public key)</div>
+          <div class="rls-card-body">
+            <div class="jwt-box">
+              <div><span class="jk">iss: </span><span class="jv">"…supabase.co/functions/v1/oidc"</span></div>
+              <div><span class="jk">aud: </span><span class="jv">"tenant-alpha"</span></div>
+              <div><span class="jk">sub: </span><span class="jv hl" id="jwt-sub">a1b2c3d4-…</span></div>
+              <div><span class="jk">email: </span><span class="jv">"alpha@demo.local"</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="rls-card" style="margin-top:14px">
+          <div class="rls-card-hdr">📋 RLS Policy on tenant_notes</div>
+          <div class="rls-card-body">
+            <div class="policy-box"><span class="pc">-- only your rows come back</span>
+<span class="pk">CREATE POLICY</span> <span class="ps">"own rows"</span>
+  <span class="pk">ON</span> tenant_notes <span class="pk">FOR ALL</span>
+  <span class="pk">TO</span> authenticated
+  <span class="pk">USING</span> (
+    user_id = <span class="pf">auth.uid()</span>
+  );</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Database table -->
+      <div class="rls-card">
+        <div class="rls-card-hdr">🗄 tenant_notes (all rows in the table)</div>
+        <div class="rls-card-body">
+          <table class="db-table">
+            <thead><tr><th>user_id</th><th>content</th></tr></thead>
+            <tbody id="rls-rows">
+              <tr class="db-row" data-uid="a1b2c3d4"><td>a1b2c3d4</td><td>Alpha note 1</td></tr>
+              <tr class="db-row" data-uid="b5e6f7a8"><td>b5e6f7a8</td><td>Another user's note</td></tr>
+              <tr class="db-row" data-uid="a1b2c3d4"><td>a1b2c3d4</td><td>Alpha note 2</td></tr>
+              <tr class="db-row" data-uid="c9d0e1f2"><td>c9d0e1f2</td><td>Someone else's data</td></tr>
+              <tr class="db-row" data-uid="a1b2c3d4"><td>a1b2c3d4</td><td>Alpha note 3</td></tr>
+            </tbody>
+          </table>
+          <div class="rls-status" id="rls-status">All rows visible (pre-filter)</div>
+          <button class="rls-toggle-btn" onclick="toggleRls()">Toggle RLS filter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ── Architecture ───────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h2>Three fully isolated Supabase projects</h2>
+    <p class="section-sub">Only the Command Center stores user accounts. Tenants hold only application data — they trust the CC's RS256 JWT signature to establish identity.</p>
+
+    <div class="arch-grid">
+      <div class="arch-card">
+        <div class="arch-card-top">
+          <div class="arch-icon icon-cc">CC</div>
+          <div>
+            <h3>Command Center</h3>
+            <div class="arch-ref">OIDC Provider · Edge Function</div>
+          </div>
+        </div>
+        <ul class="arch-features">
+          <li>OIDC discovery + JWKS endpoint</li>
+          <li>Authorization code issuance</li>
+          <li>PKCE (S256) verification</li>
+          <li>RS256 JWT signing</li>
+          <li>User accounts (auth.users)</li>
+          <li>Per-tenant access via app_metadata</li>
+          <li>oauth_clients + auth_codes tables</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-top">
+          <div class="arch-icon icon-alpha">α</div>
+          <div>
+            <h3>Tenant Alpha</h3>
+            <div class="arch-ref">Resource Server · Edge Function</div>
+          </div>
+        </div>
+        <ul class="arch-features">
+          <li>Verifies JWT via CC's JWKS</li>
+          <li>Checks iss + aud claims</li>
+          <li>No user accounts stored</li>
+          <li>tenant_notes table</li>
+          <li>RLS: user_id = JWT sub</li>
+          <li>GET + POST /notes</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-top">
+          <div class="arch-icon icon-beta">β</div>
+          <div>
+            <h3>Tenant Beta</h3>
+            <div class="arch-ref">Resource Server · Edge Function</div>
+          </div>
+        </div>
+        <ul class="arch-features">
+          <li>Same pattern as Tenant Alpha</li>
+          <li>Separate Supabase project</li>
+          <li>Audience: "tenant-beta"</li>
+          <li>Isolated data store</li>
+          <li>Access controlled by CC</li>
+          <li>GET + POST /notes</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="stack-row">
+      <div class="stack-item">
+        <h4>Supabase Edge Functions</h4>
+        <p>All server-side logic — OIDC provider and tenant APIs — runs as Deno Edge Functions. No separate backend infra.</p>
+      </div>
+      <div class="stack-item">
+        <h4>jose (npm:jose@5)</h4>
+        <p>RS256 JWT signing in the OIDC function. Remote JWKS verification in tenant functions via <code style="color:#3ecf8e">createRemoteJWKSet</code>.</p>
+      </div>
+      <div class="stack-item">
+        <h4>Demo App</h4>
+        <p>Single HTML file — no build step. Implements full PKCE flow, one-click demo accounts, and per-tenant notes dashboard.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<footer>
+  <div class="container">
+    <p>
+      Built with <a href="https://supabase.com">Supabase</a> Edge Functions ·
+      <a href="https://github.com/brendan-stephens/supabase-multitenant-oauth">View source on GitHub</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+// ── Sequence diagram ────────────────────────────────────────────────
+const TOTAL = 10;
+let step = 0;
+let timer = null;
+let playing = false;
+
+function setBtn(txt, disabled) {
+  const b = document.getElementById('btn-seq');
+  b.textContent = txt;
+  b.disabled = !!disabled;
+}
+
+function setInd() {
+  document.getElementById('step-ind').textContent = `step ${step} / ${TOTAL}`;
+}
+
+function showStep(n) {
+  const el = document.getElementById(`s${n}`);
+  if (el) el.style.opacity = '1';
+}
+
+function dimStep(n) {
+  const el = document.getElementById(`s${n}`);
+  if (el) el.style.opacity = '0.28';
+}
+
+function resetSeq(silent) {
+  clearTimeout(timer); timer = null; playing = false;
+  step = 0;
+  for (let i = 1; i <= TOTAL; i++) {
+    const el = document.getElementById(`s${i}`);
+    if (el) { el.style.transition = 'none'; el.style.opacity = '0'; setTimeout(() => el.style.transition = 'opacity .4s ease', 20); }
+  }
+  if (!silent) { setInd(); setBtn('▶ Play', false); }
+}
+
+function tick() {
+  step++;
+  for (let i = 1; i < step; i++) dimStep(i);
+  showStep(step);
+  setInd();
+  if (step >= TOTAL) {
+    playing = false; timer = null;
+    setBtn('↺ Replay', false);
+  } else {
+    timer = setTimeout(tick, 850);
+  }
+}
+
+function play() {
+  if (playing) return;
+  playing = true;
+  setBtn('⏸ Playing…', true);
+  timer = setTimeout(tick, 300);
+}
+
+function handleSeqBtn() {
+  if (step >= TOTAL) { resetSeq(); setTimeout(play, 60); }
+  else if (!playing) play();
+}
+
+// Auto-play on scroll into view
+const seqObs = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting && step === 0 && !playing) setTimeout(play, 600);
+}, { threshold: 0.25 });
+const sw = document.getElementById('seq-wrap');
+if (sw) seqObs.observe(sw);
+
+// ── RLS animation ────────────────────────────────────────────────────
+const TARGET = 'a1b2c3d4';
+let rlsFiltered = false;
+
+function applyRls() {
+  document.querySelectorAll('#rls-rows .db-row').forEach(r => {
+    if (r.dataset.uid === TARGET) { r.classList.add('match'); r.classList.remove('no-match'); }
+    else { r.classList.add('no-match'); r.classList.remove('match'); }
+  });
+  const s = document.getElementById('rls-status');
+  s.innerHTML = '<span style="color:#3ecf8e">✓ RLS applied — only rows where user_id = sub are visible</span>';
+  rlsFiltered = true;
+}
+
+function removeRls() {
+  document.querySelectorAll('#rls-rows .db-row').forEach(r => r.classList.remove('match','no-match'));
+  document.getElementById('rls-status').textContent = 'All rows visible (pre-filter)';
+  rlsFiltered = false;
+}
+
+function toggleRls() { rlsFiltered ? removeRls() : applyRls(); }
+
+// Auto-trigger RLS animation on scroll
+let rlsDone = false;
+const rlsObs = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting && !rlsDone) {
+    rlsDone = true;
+    setTimeout(applyRls, 900);
+  }
+}, { threshold: 0.35 });
+const rg = document.getElementById('rls-grid');
+if (rg) rlsObs.observe(rg);
+</script>
+</body>
+</html>

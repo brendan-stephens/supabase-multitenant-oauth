@@ -1,0 +1,5 @@
+.claude/
+supabase/.temp/
+tenant-app/supabase/
+*.local
+.DS_Store

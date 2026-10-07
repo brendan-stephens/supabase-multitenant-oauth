@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Tenant OAuth 2.1 Demo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#f0f0f0;min-height:100vh}
+
+/* ── Nav ── */
+.nav{background:#1c1f2e;border-bottom:1px solid #2e3347;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between}
+.nav-brand{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.nav-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tenant-alpha .nav-dot{background:#3ecf8e}
+.tenant-beta  .nav-dot{background:#7c8df8}
+.nav-right{display:flex;align-items:center;gap:12px;font-size:13px;color:#8b95a5}
+.btn-sm{padding:5px 12px;border-radius:6px;border:1px solid #2e3347;background:transparent;color:#c5ccd9;font-size:12px;cursor:pointer}
+.btn-sm:hover{background:#2e3347}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:200;padding:20px}
+.modal-overlay.open{display:flex}
+.modal{background:#1c1f2e;border:1px solid #2e3347;border-radius:16px;width:100%;max-width:580px;max-height:85vh;overflow-y:auto}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid #2e3347;position:sticky;top:0;background:#1c1f2e;z-index:1}
+.modal-header h2{font-size:16px;font-weight:600}
+.modal-close{width:28px;height:28px;border-radius:6px;border:1px solid #2e3347;background:transparent;color:#8b95a5;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:#2e3347;color:#f0f0f0}
+.modal-body{padding:20px 24px 24px}
+.modal-section{margin-bottom:20px}
+.modal-section:last-child{margin-bottom:0}
+.modal-section-title{font-size:11px;font-weight:600;color:#4a5568;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+
+/* Flow table */
+.flow-table{width:100%;border-collapse:collapse}
+.flow-table td{padding:5px 8px;font-size:12px;font-family:'SF Mono',ui-monospace,monospace;white-space:nowrap}
+.flow-table tr:hover td{background:#161a27;border-radius:4px}
+.flow-table .fn{color:#4a5568;width:20px;padding-right:0}
+.flow-table .from{color:#7eb8f7;min-width:52px}
+.flow-table .arrow{color:#2e3347;padding:5px 2px}
+.flow-table .to{color:#a78bfa;min-width:60px}
+.flow-table .ep{color:#3ecf8e;min-width:110px}
+.flow-table .desc{color:#4a5568}
+
+/* Demo users table */
+.users-table{width:100%;border-collapse:collapse}
+.users-table td{padding:6px 8px;font-size:12px}
+.users-table tr:hover td{background:#161a27}
+.users-table .uemail{font-family:'SF Mono',ui-monospace,monospace;color:#f0f0f0}
+.users-table .upass{font-family:'SF Mono',ui-monospace,monospace;color:#4a5568}
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px}
+.badge-alpha{background:#0d3327;color:#3ecf8e;border:1px solid #1a5e45}
+.badge-beta{background:#1a1a3e;color:#7c8df8;border:1px solid #2e2e7a}
+.badge-both{background:#2a1a3e;color:#c084fc;border:1px solid #6b21a8}
+
+/* ── Login screen ── */
+.login-screen{display:none;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-card{background:#1c1f2e;border:1px solid #2e3347;border-radius:16px;padding:36px;width:100%;max-width:460px}
+
+/* Choose-tenant view */
+.login-title{font-size:22px;font-weight:700;margin-bottom:4px}
+.login-sub{font-size:13px;color:#8b95a5;margin-bottom:28px}
+.login-sub a{color:#7eb8f7;text-decoration:none;cursor:pointer}
+.login-sub a:hover{text-decoration:underline}
+
+.section-label{font-size:11px;font-weight:600;color:#4a5568;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+
+.account-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.account-card{display:flex;align-items:center;gap:14px;padding:14px 16px;background:#0f1117;border:1px solid #2e3347;border-radius:10px;cursor:default;transition:border-color .15s}
+.account-card:hover{border-color:#3a4460}
+.acct-avatar{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.av-alpha{background:#0d3327;color:#3ecf8e;border:1px solid #1a5e45}
+.av-beta{background:#1a1a3e;color:#7c8df8;border:1px solid #2e2e7a}
+.av-both{background:#2a1a3e;color:#c084fc;border:1px solid #6b21a8}
+.acct-info{flex:1;min-width:0}
+.acct-email{font-size:14px;font-weight:500;font-family:'SF Mono',ui-monospace,monospace;color:#f0f0f0}
+.acct-pass{font-size:11px;color:#4a5568;margin-top:2px;font-family:'SF Mono',ui-monospace,monospace}
+.acct-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.acct-actions .badge{display:block}
+.btn-login{background:#3ecf8e;color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.btn-login:hover{opacity:.85}
+.btn-login-beta{background:#7c8df8}
+.btn-login-both{background:#c084fc}
+.both-btns{display:flex;gap:6px}
+
+.manual-signin{text-align:center;font-size:12px;color:#4a5568;padding-top:4px}
+.manual-signin a{color:#7eb8f7;text-decoration:none;cursor:pointer}
+.manual-signin a:hover{text-decoration:underline}
+
+/* Tenant picker (manual sign-in) */
+.tenant-picker{display:none;margin-top:12px;background:#0f1117;border:1px solid #2e3347;border-radius:10px;padding:14px 16px}
+.tenant-picker.open{display:block}
+.picker-label{font-size:11px;font-weight:600;color:#4a5568;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+.picker-options{display:flex;gap:8px;margin-bottom:12px}
+.picker-opt{flex:1;padding:9px 12px;border-radius:8px;border:1px solid #2e3347;background:transparent;color:#8b95a5;font-size:13px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.picker-opt:hover{border-color:#3a4460;color:#c5ccd9}
+.picker-opt.active-alpha{border-color:#3ecf8e;background:#0d3327;color:#3ecf8e}
+.picker-opt.active-beta{border-color:#7c8df8;background:#1a1a3e;color:#7c8df8}
+.btn-picker-go{width:100%;background:#3ecf8e;color:#000;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn-picker-go:hover{opacity:.88}
+.btn-picker-go.beta-active{background:#7c8df8}
+
+/* CC auth form view */
+.cc-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding:12px 14px;background:#0f1117;border:1px solid #2e3347;border-radius:8px}
+.cc-logo{width:32px;height:32px;background:#3ecf8e;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#000;flex-shrink:0}
+.cc-name{font-size:14px;font-weight:600}
+.cc-sub{font-size:11px;color:#4a5568;margin-top:1px}
+.auth-title{font-size:19px;font-weight:700;margin-bottom:4px}
+.auth-sub{font-size:13px;color:#8b95a5;margin-bottom:20px}
+.field-label{display:block;font-size:12px;font-weight:500;color:#c5ccd9;margin-bottom:5px}
+.field-input{width:100%;background:#0f1117;border:1px solid #2e3347;border-radius:8px;padding:9px 12px;color:#f0f0f0;font-size:14px;margin-bottom:12px;outline:none;transition:border-color .15s}
+.field-input:focus{border-color:#3ecf8e}
+.btn-primary{width:100%;background:#3ecf8e;color:#000;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn-primary:hover{opacity:.88}
+.err-msg{background:#3a1515;border:1px solid #7c2d2d;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#f87171}
+.form-links{display:flex;justify-content:space-between;margin-top:14px;font-size:12px;color:#4a5568}
+.form-links a{color:#7eb8f7;text-decoration:none;cursor:pointer}
+.form-links a:hover{text-decoration:underline}
+
+/* ── Dashboard ── */
+.dashboard{display:none;padding:28px 20px;max-width:760px;margin:0 auto}
+.welcome-card{background:#1c1f2e;border:1px solid #2e3347;border-radius:12px;padding:22px;margin-bottom:20px}
+.welcome-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.welcome-title{font-size:16px;font-weight:600}
+.tenant-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.tenant-alpha .tenant-pill{background:#0d3327;color:#3ecf8e;border:1px solid #1a5e45}
+.tenant-beta  .tenant-pill{background:#1a1a3e;color:#7c8df8;border:1px solid #2e2e7a}
+.tenant-pill-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.meta-row{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:#8b95a5}
+.meta-item{display:flex;align-items:center;gap:5px}
+.meta-label{color:#4a5568}
+.meta-val{font-family:'SF Mono',ui-monospace,monospace;color:#c5ccd9}
+details.jwt-details{margin-top:12px}
+details.jwt-details summary{font-size:12px;color:#7eb8f7;cursor:pointer;list-style:none;padding:8px 12px;background:#0f1117;border:1px solid #2e3347;border-radius:6px;display:flex;justify-content:space-between}
+details.jwt-details[open] summary{border-radius:6px 6px 0 0;border-bottom-color:transparent}
+.jwt-body{background:#0f1117;border:1px solid #2e3347;border-top:none;border-radius:0 0 6px 6px;padding:10px 12px;font-family:'SF Mono',ui-monospace,monospace;font-size:11px;color:#8b95a5;line-height:1.6;max-height:160px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+
+.notes-card{background:#1c1f2e;border:1px solid #2e3347;border-radius:12px;padding:22px}
+.notes-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.notes-title{font-size:15px;font-weight:600}
+.notes-meta{font-size:11px;color:#4a5568}
+.note-form{display:flex;gap:8px;margin-bottom:16px}
+.note-input{flex:1;background:#0f1117;border:1px solid #2e3347;border-radius:8px;padding:9px 12px;color:#f0f0f0;font-size:13px;outline:none}
+.note-input:focus{border-color:#3ecf8e}
+.btn-add{background:#3ecf8e;color:#000;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn-add:hover{opacity:.88}
+.tenant-beta .btn-add{background:#7c8df8}
+.note-item{background:#0f1117;border:1px solid #2e3347;border-radius:8px;padding:11px 14px;margin-bottom:6px}
+.note-content{font-size:13px;line-height:1.5}
+.note-time{font-size:10px;color:#4a5568;margin-top:5px;font-family:'SF Mono',ui-monospace,monospace}
+.empty-state{text-align:center;color:#4a5568;font-size:13px;padding:28px 0}
+.loading{text-align:center;padding:32px;color:#4a5568;font-size:13px}
+.notes-err{background:#3a1515;border:1px solid #7c2d2d;border-radius:8px;padding:10px 14px;font-size:13px;color:#f87171;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<!-- Architecture modal -->
+<div class="modal-overlay" id="arch-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>OAuth 2.1 + PKCE Architecture</h2>
+      <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <div class="modal-section-title">Authorization Flow</div>
+        <table class="flow-table">
+          <tr><td class="fn">1</td><td class="from">App</td><td class="arrow">&#8594;</td><td class="to">CC</td><td class="ep">/authorize</td><td class="desc">PKCE start (code_challenge)</td></tr>
+          <tr><td class="fn">2</td><td class="from">CC</td><td class="arrow">&#8594;</td><td class="to">App</td><td class="ep">?_cc=login</td><td class="desc">redirect to login form</td></tr>
+          <tr><td class="fn">3</td><td class="from">App</td><td class="arrow">&#8594;</td><td class="to">CC</td><td class="ep">/authorize</td><td class="desc">POST credentials</td></tr>
+          <tr><td class="fn">4</td><td class="from">CC</td><td class="arrow">&#8594;</td><td class="to">App</td><td class="ep">?code=&#8230;</td><td class="desc">one-time auth code</td></tr>
+          <tr><td class="fn">5</td><td class="from">App</td><td class="arrow">&#8594;</td><td class="to">CC</td><td class="ep">/token</td><td class="desc">exchange code + verifier</td></tr>
+          <tr><td class="fn">6</td><td class="from">CC</td><td class="arrow">&#8594;</td><td class="to">App</td><td class="ep">JWT (RS256)</td><td class="desc">access + id token</td></tr>
+          <tr><td class="fn">7</td><td class="from">App</td><td class="arrow">&#8594;</td><td class="to">Tenant</td><td class="ep">/data</td><td class="desc">API call with Bearer JWT</td></tr>
+          <tr><td class="fn">8</td><td class="from">Tenant</td><td class="arrow">&#8594;</td><td class="to">CC</td><td class="ep">/jwks</td><td class="desc">fetch public key</td></tr>
+          <tr><td class="fn">9</td><td class="from">Tenant</td><td class="arrow">&#8594;</td><td class="to">App</td><td class="ep">notes</td><td class="desc">rows scoped to JWT sub</td></tr>
+        </table>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">Demo Accounts</div>
+        <table class="users-table">
+          <tr>
+            <td class="uemail">alpha@demo.local</td>
+            <td class="upass">Demo1234!</td>
+            <td><span class="badge badge-alpha">Alpha only</span></td>
+          </tr>
+          <tr>
+            <td class="uemail">beta@demo.local</td>
+            <td class="upass">Demo1234!</td>
+            <td><span class="badge badge-beta">Beta only</span></td>
+          </tr>
+          <tr>
+            <td class="uemail">both@demo.local</td>
+            <td class="upass">Demo1234!</td>
+            <td><span class="badge badge-both">Alpha + Beta</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">Projects</div>
+        <table class="users-table">
+          <tr><td style="color:#4a5568;font-size:11px;font-family:monospace">Command Center</td><td style="font-family:monospace;font-size:11px;color:#8b95a5">mqawauxnyjkgcfwgahmh</td><td style="font-size:11px;color:#4a5568">OIDC provider</td></tr>
+          <tr><td style="color:#4a5568;font-size:11px;font-family:monospace">Tenant Alpha</td><td style="font-family:monospace;font-size:11px;color:#8b95a5">ebhbrjvvzwoiszfjpvdx</td><td style="font-size:11px;color:#4a5568">data API</td></tr>
+          <tr><td style="color:#4a5568;font-size:11px;font-family:monospace">Tenant Beta</td><td style="font-family:monospace;font-size:11px;color:#8b95a5">mqeypgonyjafcuwuyswu</td><td style="font-size:11px;color:#4a5568">data API</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nav (dashboard only) -->
+<nav class="nav" id="nav" style="display:none">
+  <div class="nav-brand">
+    <span class="nav-dot"></span>
+    <span id="nav-tenant-name"></span>
+  </div>
+  <div class="nav-right">
+    <span id="nav-email"></span>
+    <button class="btn-sm" onclick="logout()">Sign out</button>
+  </div>
+</nav>
+
+<!-- Login screen -->
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+
+    <!-- View: pick a demo account -->
+    <div id="view-choose">
+      <div class="login-title">Multi-Tenant OAuth 2.1 Demo</div>
+      <div class="login-sub">
+        <a onclick="openModal()">Powered by Command Center OAuth 2.1 + PKCE &#8599;</a>
+      </div>
+
+      <div class="section-label">Choose a demo account</div>
+      <div class="account-list">
+
+        <div class="account-card">
+          <div class="acct-avatar av-alpha">&#945;</div>
+          <div class="acct-info">
+            <div class="acct-email">alpha@demo.local</div>
+            <div class="acct-pass">Demo1234!</div>
+          </div>
+          <div class="acct-actions">
+            <span class="badge badge-alpha">Alpha only</span>
+            <button class="btn-login" onclick="loginAs('alpha@demo.local','Demo1234!','alpha')">Sign in &#8594;</button>
+          </div>
+        </div>
+
+        <div class="account-card">
+          <div class="acct-avatar av-beta">&#946;</div>
+          <div class="acct-info">
+            <div class="acct-email">beta@demo.local</div>
+            <div class="acct-pass">Demo1234!</div>
+          </div>
+          <div class="acct-actions">
+            <span class="badge badge-beta">Beta only</span>
+            <button class="btn-login btn-login-beta" onclick="loginAs('beta@demo.local','Demo1234!','beta')">Sign in &#8594;</button>
+          </div>
+        </div>
+
+        <div class="account-card">
+          <div class="acct-avatar av-both">&#945;&#946;</div>
+          <div class="acct-info">
+            <div class="acct-email">both@demo.local</div>
+            <div class="acct-pass">Demo1234!</div>
+          </div>
+          <div class="acct-actions">
+            <span class="badge badge-both">Alpha + Beta</span>
+            <div class="both-btns">
+              <button class="btn-login" onclick="loginAs('both@demo.local','Demo1234!','alpha')">&#945; Alpha</button>
+              <button class="btn-login btn-login-beta" onclick="loginAs('both@demo.local','Demo1234!','beta')">&#946; Beta</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="err-choose" class="err-msg" style="display:none"></div>
+      <div class="manual-signin">
+        or <a onclick="toggleTenantPicker()">sign in with any account</a>
+      </div>
+      <div class="tenant-picker" id="tenant-picker">
+        <div class="picker-label">Select tenant</div>
+        <div class="picker-options">
+          <button class="picker-opt active-alpha" id="pick-alpha" onclick="selectPickerTenant('alpha')">&#945; Tenant Alpha</button>
+          <button class="picker-opt" id="pick-beta" onclick="selectPickerTenant('beta')">&#946; Tenant Beta</button>
+        </div>
+        <button class="btn-picker-go" id="btn-picker-go" onclick="startPickerOAuth()">Sign in with Command Center &#8594;</button>
+      </div>
+    </div>
+
+    <!-- View: CC login form (after OAuth redirect) -->
+    <div id="view-login" style="display:none">
+      <div class="cc-header">
+        <div class="cc-logo">CC</div>
+        <div>
+          <div class="cc-name">Command Center</div>
+          <div class="cc-sub">OAuth 2.1 Authorization</div>
+        </div>
+      </div>
+      <div class="auth-title">Sign in</div>
+      <div class="auth-sub" id="login-client-label"></div>
+      <div id="err-login" class="err-msg" style="display:none"></div>
+      <form id="login-form" method="POST">
+        <label class="field-label">Email</label>
+        <input class="field-input" type="email" id="login-email" name="email" required autofocus placeholder="you@example.com">
+        <label class="field-label">Password</label>
+        <input class="field-input" type="password" id="login-password" name="password" required placeholder="••••••••">
+        <button class="btn-primary" type="submit">Sign in &#8594;</button>
+      </form>
+      <div class="form-links">
+        <a id="link-to-signup">Create account</a>
+        <a onclick="cancelAuth()">Cancel</a>
+      </div>
+    </div>
+
+    <!-- View: CC signup form (after OAuth redirect) -->
+    <div id="view-signup" style="display:none">
+      <div class="cc-header">
+        <div class="cc-logo">CC</div>
+        <div>
+          <div class="cc-name">Command Center</div>
+          <div class="cc-sub">OAuth 2.1 Authorization</div>
+        </div>
+      </div>
+      <div class="auth-title">Create account</div>
+      <div class="auth-sub" id="signup-client-label"></div>
+      <div id="err-signup" class="err-msg" style="display:none"></div>
+      <form id="signup-form" method="POST">
+        <label class="field-label">Email</label>
+        <input class="field-input" type="email" name="email" required autofocus placeholder="you@example.com">
+        <label class="field-label">Password</label>
+        <input class="field-input" type="password" name="password" required placeholder="Min 6 characters" minlength="6">
+        <button class="btn-primary" type="submit">Create account &#8594;</button>
+      </form>
+      <div class="form-links">
+        <a id="link-to-login">Already have an account</a>
+        <a onclick="cancelAuth()">Cancel</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+
+  <div class="welcome-card">
+    <div class="welcome-top">
+      <div class="welcome-title">Signed in</div>
+      <div class="tenant-pill">
+        <span class="tenant-pill-dot"></span>
+        <span id="dash-tenant-name"></span>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-item"><span class="meta-label">email</span><span class="meta-val" id="dash-email"></span></div>
+      <div class="meta-item"><span class="meta-label">sub</span><span class="meta-val" id="dash-sub"></span></div>
+      <div class="meta-item"><span class="meta-label">aud</span><span class="meta-val" id="dash-aud"></span></div>
+    </div>
+    <details class="jwt-details">
+      <summary>JWT claims <span>&#9662;</span></summary>
+      <div class="jwt-body" id="jwt-body"></div>
+    </details>
+  </div>
+
+  <div class="notes-card">
+    <div class="notes-header">
+      <div class="notes-title">Notes</div>
+      <div class="notes-meta" id="notes-meta"></div>
+    </div>
+    <div id="err-notes" class="notes-err" style="display:none"></div>
+    <div class="note-form">
+      <input class="note-input" id="note-input" placeholder="Add a note&#8230;" onkeydown="if(event.key==='Enter')addNote()">
+      <button class="btn-add" onclick="addNote()">Add</button>
+    </div>
+    <div id="notes-list"><div class="loading">Loading&#8230;</div></div>
+  </div>
+
+</div>
+
+<script>
+const CC_URL = 'https://mqawauxnyjkgcfwgahmh.supabase.co/functions/v1/oidc';
+const TENANTS = {
+  alpha: { id: 'tenant-alpha', name: 'Tenant Alpha', dataUrl: 'https://ebhbrjvvzwoiszfjpvdx.supabase.co/functions/v1/data' },
+  beta:  { id: 'tenant-beta',  name: 'Tenant Beta',  dataUrl: 'https://mqeypgonyjafcuwuyswu.supabase.co/functions/v1/data' },
+};
+
+// ── Modal ──────────────────────────────────────
+function openModal()  { document.getElementById('arch-modal').classList.add('open'); }
+function closeModal() { document.getElementById('arch-modal').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── PKCE helpers ───────────────────────────────
+function randomB64url(n) {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n))))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function sha256B64url(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function getRedirectUri() {
+  return window.location.href.split('?')[0].split('#')[0].replace(/\/$/, '');
+}
+
+// ── OAuth start ────────────────────────────────
+async function startOAuth(tenantKey) {
+  const tenant = TENANTS[tenantKey];
+  const verifier = randomB64url(32);
+  const challenge = await sha256B64url(verifier);
+  const state = randomB64url(16);
+
+  sessionStorage.setItem('oauth_verifier', verifier);
+  sessionStorage.setItem('oauth_state', state);
+  sessionStorage.setItem('oauth_tenant', tenantKey);
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: tenant.id,
+    redirect_uri: getRedirectUri(),
+    scope: 'openid email profile',
+    state,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+  });
+  window.location.href = `${CC_URL}/authorize?${params}`;
+}
+
+// One-click demo login: store credentials, start OAuth
+function loginAs(email, password, tenantKey) {
+  sessionStorage.setItem('demo_email', email);
+  sessionStorage.setItem('demo_password', password);
+  startOAuth(tenantKey);
+}
+
+// Manual login: inline tenant picker
+let _pickerTenant = 'alpha';
+
+function toggleTenantPicker() {
+  const picker = document.getElementById('tenant-picker');
+  picker.classList.toggle('open');
+}
+
+function selectPickerTenant(key) {
+  _pickerTenant = key;
+  document.getElementById('pick-alpha').className = 'picker-opt' + (key === 'alpha' ? ' active-alpha' : '');
+  document.getElementById('pick-beta').className  = 'picker-opt' + (key === 'beta'  ? ' active-beta'  : '');
+  document.getElementById('btn-picker-go').className = 'btn-picker-go' + (key === 'beta' ? ' beta-active' : '');
+}
+
+function startPickerOAuth() {
+  startOAuth(_pickerTenant);
+}
+
+function cancelAuth() {
+  sessionStorage.removeItem('demo_email');
+  sessionStorage.removeItem('demo_password');
+  window.history.replaceState({}, '', window.location.pathname);
+  init();
+}
+
+// ── OAuth callback ─────────────────────────────
+async function handleCallback(params) {
+  const code = params.get('code');
+  if (!code) return false;
+
+  if (params.get('state') !== sessionStorage.getItem('oauth_state')) {
+    showLoginScreen('choose');
+    showErr('choose', 'State mismatch — possible CSRF. Please try again.');
+    return true;
+  }
+
+  const tenantKey = sessionStorage.getItem('oauth_tenant') || 'alpha';
+  const tenant = TENANTS[tenantKey];
+
+  const resp = await fetch(`${CC_URL}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: getRedirectUri(),
+      client_id: tenant.id,
+      code_verifier: sessionStorage.getItem('oauth_verifier'),
+    }),
+  });
+
+  const tok = await resp.json();
+  if (!resp.ok || !tok.access_token) {
+    showLoginScreen('choose');
+    showErr('choose', `Token exchange failed: ${JSON.stringify(tok)}`);
+    return true;
+  }
+
+  sessionStorage.removeItem('oauth_verifier');
+  sessionStorage.removeItem('oauth_state');
+  sessionStorage.removeItem('oauth_tenant');
+  localStorage.setItem('access_token', tok.access_token);
+  localStorage.setItem('tenant', tenantKey);
+  window.history.replaceState({}, '', window.location.pathname);
+  return true;
+}
+
+// ── Auth form wiring ───────────────────────────
+function setupAuthForms(params) {
+  const oauthParams = new URLSearchParams();
+  for (const [k, v] of params.entries()) {
+    if (k !== '_cc' && k !== '_cc_error') oauthParams.set(k, v);
+  }
+
+  const clientId = params.get('client_id') || '';
+  const tenantKey = clientId === 'tenant-alpha' ? 'alpha' : 'beta';
+  const tenantName = TENANTS[tenantKey]?.name || clientId;
+
+  document.getElementById('login-form').action = `${CC_URL}/authorize?${oauthParams}`;
+  document.getElementById('login-client-label').textContent = `${tenantName} is requesting access`;
+  document.getElementById('signup-form').action = `${CC_URL}/signup?${oauthParams}`;
+  document.getElementById('signup-client-label').textContent = `Register to access ${tenantName}`;
+
+  const base = window.location.href.split('?')[0];
+  const loginUrl  = new URL(base); for (const [k,v] of oauthParams) loginUrl.searchParams.set(k,v);  loginUrl.searchParams.set('_cc','login');
+  const signupUrl = new URL(base); for (const [k,v] of oauthParams) signupUrl.searchParams.set(k,v); signupUrl.searchParams.set('_cc','signup');
+
+  document.getElementById('link-to-signup').href = signupUrl.toString();
+  document.getElementById('link-to-login').href  = loginUrl.toString();
+}
+
+// ── Show / hide ────────────────────────────────
+function showLoginScreen(view) {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('nav').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('view-choose').style.display = view === 'choose' ? 'block' : 'none';
+  document.getElementById('view-login').style.display  = view === 'login'  ? 'block' : 'none';
+  document.getElementById('view-signup').style.display = view === 'signup' ? 'block' : 'none';
+}
+
+function showErr(section, msg) {
+  const el = document.getElementById(`err-${section}`);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function decodeJWT(token) {
+  try { return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }
+  catch { return null; }
+}
+
+function logout() {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('tenant');
+  window.location.reload();
+}
+
+// ── Dashboard ──────────────────────────────────
+function showDashboard() {
+  const token = localStorage.getItem('access_token');
+  const tenantKey = localStorage.getItem('tenant') || 'alpha';
+  const claims = decodeJWT(token);
+  const tenant = TENANTS[tenantKey];
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('nav').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'block';
+
+  document.body.className = `tenant-${tenantKey}`;
+  document.getElementById('nav-tenant-name').textContent = tenant.name;
+  document.getElementById('nav-email').textContent = claims?.email || '';
+  document.getElementById('dash-tenant-name').textContent = tenant.name;
+  document.getElementById('dash-email').textContent = claims?.email || '—';
+  document.getElementById('dash-sub').textContent = (claims?.sub || '').slice(0,8) + '…';
+  document.getElementById('dash-aud').textContent = claims?.aud || '—';
+  document.getElementById('jwt-body').textContent = JSON.stringify(claims, null, 2);
+  document.getElementById('notes-meta').textContent = `stored in ${tenant.id} · filtered by sub`;
+
+  renderNotes();
+}
+
+// ── Notes ──────────────────────────────────────
+async function renderNotes() {
+  const token = localStorage.getItem('access_token');
+  const tenant = TENANTS[localStorage.getItem('tenant') || 'alpha'];
+  const errEl = document.getElementById('err-notes');
+  errEl.style.display = 'none';
+
+  try {
+    const r = await fetch(tenant.dataUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await r.json();
+    if (data.error) { showErr('notes', `API error: ${data.error}`); return; }
+    const el = document.getElementById('notes-list');
+    if (!data.notes?.length) {
+      el.innerHTML = '<div class="empty-state">No notes yet — add one above.</div>';
+      return;
+    }
+    el.innerHTML = data.notes.map(n => `
+      <div class="note-item">
+        <div class="note-content">${n.content}</div>
+        <div class="note-time">${new Date(n.created_at).toLocaleString()}</div>
+      </div>`).join('');
+  } catch(e) {
+    showErr('notes', `Network error: ${e.message}`);
+  }
+}
+
+async function addNote() {
+  const input = document.getElementById('note-input');
+  const content = input.value.trim();
+  if (!content) return;
+
+  const token = localStorage.getItem('access_token');
+  const tenant = TENANTS[localStorage.getItem('tenant') || 'alpha'];
+
+  const r = await fetch(tenant.dataUrl, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (r.ok) { input.value = ''; await renderNotes(); }
+  else { const err = await r.json(); showErr('notes', JSON.stringify(err)); }
+}
+
+// ── Init ───────────────────────────────────────
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const ccAction = params.get('_cc');
+  const ccError  = params.get('_cc_error');
+
+  // OAuth callback
+  if (params.get('code')) {
+    await handleCallback(params);
+    const tok = localStorage.getItem('access_token');
+    if (tok) showDashboard(); else showLoginScreen('choose');
+    return;
+  }
+
+  // CC redirected us with login/signup action
+  if (ccAction === 'login' || ccAction === 'signup') {
+    setupAuthForms(params);
+
+    // Clean the _cc_error from the URL without losing the oauth params
+    if (ccError) {
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete('_cc_error');
+      window.history.replaceState({}, '', clean.toString());
+    }
+
+    // One-click demo: auto-submit if we have stored credentials
+    if (ccAction === 'login') {
+      const email = sessionStorage.getItem('demo_email');
+      const pass  = sessionStorage.getItem('demo_password');
+      if (email && pass) {
+        sessionStorage.removeItem('demo_email');
+        sessionStorage.removeItem('demo_password');
+        document.getElementById('login-email').value = email;
+        document.getElementById('login-password').value = pass;
+        document.getElementById('login-form').submit();
+        return;
+      }
+    }
+
+    showLoginScreen(ccAction);
+    if (ccError) showErr(ccAction, ccError);
+    return;
+  }
+
+  // Existing session
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    const claims = decodeJWT(token);
+    if (claims?.exp < Date.now() / 1000) {
+      localStorage.removeItem('access_token');
+      showLoginScreen('choose');
+      showErr('choose', 'Session expired. Please sign in again.');
+      return;
+    }
+    showDashboard();
+    return;
+  }
+
+  showLoginScreen('choose');
+}
+
+init();
+</script>
+</body>
+</html>
