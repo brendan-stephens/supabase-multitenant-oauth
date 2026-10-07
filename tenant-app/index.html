@@ -316,30 +316,6 @@ details.jwt-details[open] summary{border-radius:6px 6px 0 0;border-bottom-color:
       </div>
     </div>
 
-    <!-- View: CC signup form (after OAuth redirect) -->
-    <div id="view-signup" style="display:none">
-      <div class="cc-header">
-        <div class="cc-logo">CC</div>
-        <div>
-          <div class="cc-name">Command Center</div>
-          <div class="cc-sub">OAuth 2.1 Authorization</div>
-        </div>
-      </div>
-      <div class="auth-title">Create account</div>
-      <div class="auth-sub" id="signup-client-label"></div>
-      <div id="err-signup" class="err-msg" style="display:none"></div>
-      <form id="signup-form" method="POST">
-        <label class="field-label">Email</label>
-        <input class="field-input" type="email" name="email" required autofocus placeholder="you@example.com">
-        <label class="field-label">Password</label>
-        <input class="field-input" type="password" name="password" required placeholder="Min 6 characters" minlength="6">
-        <button class="btn-primary" type="submit">Create account &#8594;</button>
-      </form>
-      <div class="form-links">
-        <a id="link-to-login">Already have an account</a>
-        <a onclick="cancelAuth()">Cancel</a>
-      </div>
-    </div>
 
   </div>
 </div>
@@ -518,15 +494,6 @@ function setupAuthForms(params) {
 
   document.getElementById('login-form').action = `${CC_URL}/authorize?${oauthParams}`;
   document.getElementById('login-client-label').textContent = `${tenantName} is requesting access`;
-  document.getElementById('signup-form').action = `${CC_URL}/signup?${oauthParams}`;
-  document.getElementById('signup-client-label').textContent = `Register to access ${tenantName}`;
-
-  const base = window.location.href.split('?')[0];
-  const loginUrl  = new URL(base); for (const [k,v] of oauthParams) loginUrl.searchParams.set(k,v);  loginUrl.searchParams.set('_cc','login');
-  const signupUrl = new URL(base); for (const [k,v] of oauthParams) signupUrl.searchParams.set(k,v); signupUrl.searchParams.set('_cc','signup');
-
-  document.getElementById('link-to-signup').href = signupUrl.toString();
-  document.getElementById('link-to-login').href  = loginUrl.toString();
 }
 
 // ── Show / hide ────────────────────────────────
