@@ -216,6 +216,7 @@ async function token(req: Request) {
     sub: row.user_id,
     email: row.user_email,
     email_verified: true,
+    role: "authenticated",
     iss: ISSUER,
     aud: client_id,
     iat: now,
